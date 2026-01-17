@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Zap, Moon, Sun, Copy, Download, RefreshCw, ArrowLeft, Loader2 } from 'lucide-react';
 
-const API_URL = 'http://localhost:3001';
+const API_URL = 'https://freetext-humanizer-backend.onrender.com';
 
 const FreeTextHumanizer = () => {
   const [darkMode, setDarkMode] = useState(false);
@@ -17,34 +17,10 @@ const FreeTextHumanizer = () => {
 
   // Detect ad blocker
   useEffect(() => {
-    const detectAdBlocker = async () => {
-      try {
-        await fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', {
-          method: 'HEAD',
-          mode: 'no-cors'
-        });
-        setAdBlockerDetected(false);
-      } catch (e) {
-        // Check multiple ad networks
-        const testAd = document.createElement('div');
-        testAd.innerHTML = '&nbsp;';
-        testAd.className = 'adsbox ad-banner adsbygoogle';
-        testAd.style.position = 'absolute';
-        testAd.style.left = '-9999px';
-        document.body.appendChild(testAd);
-        
-        setTimeout(() => {
-          if (testAd.offsetHeight === 0) {
-            setAdBlockerDetected(true);
-          }
-          document.body.removeChild(testAd);
-        }, 100);
-      }
-    };
-
-    detectAdBlocker();
+    // TEMPORARILY DISABLE ad blocker detection
+    setAdBlockerDetected(false);
   }, []);
-
+  
   // Refresh ads on page change
   useEffect(() => {
     setAdRefreshKey(prev => prev + 1);
