@@ -343,7 +343,7 @@ const FreeTextHumanizer = () => {
         <div className="flex justify-center mt-8">
           <AdsterraBanner
             key={`bottom-${adRefreshKey}`}
-            adKey="PASTE_YOUR_728x90_ADSTERRA_KEY_HERE"
+            adKey="cd565dee18419e2f87c8cc9af2c50727"
             width={728}
             height={90}
           />
