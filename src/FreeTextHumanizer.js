@@ -362,7 +362,7 @@ const FreeTextHumanizer = () => {
         <div className="flex justify-center mt-8">
           <AdsterraBanner
             key={`bottom-${adRefreshKey}`}
-            adKey="15d45323977b03b6df0139313d64172b" // ← Replace if this is not your bottom key
+            adKey="cd199a74bf99c7d40490085e0d2ed9fe" // ← Replace if this is not your bottom key
             domain="www.highperformanceformat.com" // ← Replace with actual domain from your bottom unit
             width={728}
             height={90}
