@@ -16,8 +16,7 @@ const FreeTextHumanizer = () => {
   const [adBlockerDetected, setAdBlockerDetected] = useState(false);
   const [adRefreshKey, setAdRefreshKey] = useState(0);
 
-  // Detect ad blocker - COMMENTED OUT
-  /*
+  // Detect ad blocker
   useEffect(() => {
     const detectAdBlocker = () => {
       const bait = document.createElement('div');
@@ -27,18 +26,20 @@ const FreeTextHumanizer = () => {
       bait.style.width = '1px';
       bait.style.left = '-9999px';
       document.body.appendChild(bait);
+
       const blocked =
         bait.offsetHeight === 0 ||
         bait.offsetWidth === 0 ||
         window.getComputedStyle(bait).display === 'none';
+
       document.body.removeChild(bait);
       setAdBlockerDetected(blocked);
     };
+
     detectAdBlocker();
     const interval = setInterval(detectAdBlocker, 2000);
     return () => clearInterval(interval);
   }, []);
-  */
 
   // Lock scroll when ad blocker detected
   useEffect(() => {
@@ -56,8 +57,10 @@ const FreeTextHumanizer = () => {
 
   const handleSubmit = async () => {
     if (!inputText.trim() || inputText.length > 2000 || loading) return;
+
     setLoading(true);
     setError('');
+
     try {
       const response = await fetch(`${API_URL}/api/humanize`, {
         method: 'POST',
@@ -69,10 +72,13 @@ const FreeTextHumanizer = () => {
           tone: tone,
         }),
       });
+
       const data = await response.json();
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to humanize text');
       }
+
       setOutputData(data);
       setPage('output');
     } catch (err) {
@@ -120,8 +126,7 @@ const FreeTextHumanizer = () => {
   const isOverLimit = charCount > 2000;
   const isButtonDisabled = !inputText.trim() || isOverLimit || loading;
 
-  // Ad blocker screen - COMMENTED OUT
-  /*
+  // Ad blocker screen
   if (adBlockerDetected) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black text-white px-6">
@@ -145,7 +150,6 @@ const FreeTextHumanizer = () => {
       </div>
     );
   }
-  */
 
   return (
     <div
@@ -312,6 +316,7 @@ const FreeTextHumanizer = () => {
                 >
                   <p className="whitespace-pre-wrap">{outputData.humanizedText}</p>
                 </div>
+
                 <div
                   className={`text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}
                 >
@@ -321,6 +326,7 @@ const FreeTextHumanizer = () => {
                   <span className="mx-2">•</span>
                   <span>Humanized: {outputData.humanizedLength} chars</span>
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button
                     onClick={handleCopy}
