@@ -16,7 +16,8 @@ const FreeTextHumanizer = () => {
   const [adBlockerDetected, setAdBlockerDetected] = useState(false);
   const [adRefreshKey, setAdRefreshKey] = useState(0);
 
-  // Detect ad blocker
+  // Detect ad blocker - COMMENTED OUT
+  /*
   useEffect(() => {
     const detectAdBlocker = () => {
       const bait = document.createElement('div');
@@ -37,6 +38,7 @@ const FreeTextHumanizer = () => {
     const interval = setInterval(detectAdBlocker, 2000);
     return () => clearInterval(interval);
   }, []);
+  */
 
   // Lock scroll when ad blocker detected
   useEffect(() => {
@@ -118,6 +120,8 @@ const FreeTextHumanizer = () => {
   const isOverLimit = charCount > 2000;
   const isButtonDisabled = !inputText.trim() || isOverLimit || loading;
 
+  // Ad blocker screen - COMMENTED OUT
+  /*
   if (adBlockerDetected) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black text-white px-6">
@@ -141,6 +145,7 @@ const FreeTextHumanizer = () => {
       </div>
     );
   }
+  */
 
   return (
     <div
@@ -158,10 +163,11 @@ const FreeTextHumanizer = () => {
       <div className="flex justify-center py-4">
         <AdsterraBanner
           key={`top-${adRefreshKey}`}
-          adKey="cd565dee18419e2f87c8cc9af2c50727" // ← Replace with your TOP banner key
-          domain="www.highperformanceformat.com"   // ← Replace with actual domain from your TOP unit's code
+          adKey="cd565dee18419e2f87c8cc9af2c50727"
+          domain="www.highperformanceformat.com"
           width={728}
           height={90}
+          debug={true}
         />
       </div>
 
@@ -171,10 +177,12 @@ const FreeTextHumanizer = () => {
           {/* Left Sidebar - 160x600 */}
           <div className="hidden lg:block flex-shrink-0 sticky top-8 h-fit">
             <AdsterraBanner
-              adKey="0cc840d2d41c8c3b952d52ae7366dd20"   // ← Replace with your LEFT sidebar key
-              domain="www.highperformanceformat.com" // ← Replace with actual domain from LEFT unit
+              key={`left-${adRefreshKey}`}
+              adKey="0cc840d2d41c8c3b952d52ae7366dd20"
+              domain="www.highperformanceformat.com"
               width={160}
               height={600}
+              debug={true}
             />
           </div>
 
@@ -350,10 +358,12 @@ const FreeTextHumanizer = () => {
           {/* Right Sidebar - 160x600 */}
           <div className="hidden lg:block flex-shrink-0 sticky top-8 h-fit">
             <AdsterraBanner
-              adKey="15d45323977b03b6df0139313d64172b" // ← Replace with your right sidebar key
-              domain="www.highperformanceformat.com" // ← Replace with actual domain from your right unit
+              key={`right-${adRefreshKey}`}
+              adKey="15d45323977b03b6df0139313d64172b"
+              domain="www.highperformanceformat.com"
               width={160}
               height={600}
+              debug={true}
             />
           </div>
         </div>
@@ -362,10 +372,11 @@ const FreeTextHumanizer = () => {
         <div className="flex justify-center mt-8">
           <AdsterraBanner
             key={`bottom-${adRefreshKey}`}
-            adKey="cd199a74bf99c7d40490085e0d2ed9fe" // ← Replace if this is not your bottom key
-            domain="www.highperformanceformat.com" // ← Replace with actual domain from your bottom unit
+            adKey="cd199a74bf99c7d40490085e0d2ed9fe"
+            domain="www.highperformanceformat.com"
             width={728}
             height={90}
+            debug={true}
           />
         </div>
       </div>
