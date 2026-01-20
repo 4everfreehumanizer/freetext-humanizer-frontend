@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Zap, Moon, Sun, Copy, Download, RefreshCw, ArrowLeft, Loader2 } from 'lucide-react';
+import { Sparkles, Zap, Moon, Sun, Copy, Download, RefreshCw, ArrowLeft, Loader2, AlertCircle, CheckCircle, BarChart } from 'lucide-react';
 import AdsterraBanner from './components/AdsterraBanner';
 
 const API_URL = 'https://freetext-humanizer-backend.onrender.com';
 
 const FreeTextHumanizer = () => {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Check user preference or system theme
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode');
+      if (saved !== null) return JSON.parse(saved);
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+  
   const [page, setPage] = useState('input');
   const [inputText, setInputText] = useState('');
   const [tone, setTone] = useState('Neutral');
@@ -15,48 +24,102 @@ const FreeTextHumanizer = () => {
   const [copied, setCopied] = useState(false);
   const [adBlockerDetected, setAdBlockerDetected] = useState(false);
   const [adRefreshKey, setAdRefreshKey] = useState(0);
+  const [stats, setStats] = useState({ processed: 0, lastUpdated: null });
+  const [showStats, setShowStats] = useState(false);
 
-  // Detect ad blocker
+  // Save dark mode preference
   useEffect(() => {
-    const detectAdBlocker = () => {
-      const bait = document.createElement('div');
-      bait.className = 'adsbox adsbygoogle ad-banner ad-unit';
-      bait.style.position = 'absolute';
-      bait.style.height = '1px';
-      bait.style.width = '1px';
-      bait.style.left = '-9999px';
-      document.body.appendChild(bait);
-      const blocked =
-        bait.offsetHeight === 0 ||
-        bait.offsetWidth === 0 ||
-        window.getComputedStyle(bait).display === 'none';
-      document.body.removeChild(bait);
-      setAdBlockerDetected(blocked);
+    localStorage.setItem('darkMode', JSON.stringify(darkMode));
+    document.documentElement.classList.toggle('dark', darkMode);
+  }, [darkMode]);
+
+  // Load stats from localStorage
+  useEffect(() => {
+    const savedStats = localStorage.getItem('humanizerStats');
+    if (savedStats) {
+      try {
+        setStats(JSON.parse(savedStats));
+      } catch (e) {
+        console.error('Failed to load stats:', e);
+      }
+    }
+  }, []);
+
+  // Enhanced ad blocker detection
+  useEffect(() => {
+    const detectAdBlocker = async () => {
+      try {
+        // Method 1: Check for blocked ad scripts
+        const testUrl = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js';
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1000);
+        
+        const response = await fetch(testUrl, {
+          method: 'HEAD',
+          mode: 'no-cors',
+          signal: controller.signal
+        }).catch(() => null);
+        
+        clearTimeout(timeoutId);
+        
+        // Method 2: Check for ad-related classes being blocked
+        const bait = document.createElement('div');
+        bait.className = 'adsbox pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
+        bait.style.cssText = 'position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px;';
+        document.body.appendChild(bait);
+        
+        const computed = window.getComputedStyle(bait);
+        const blocked = computed.display === 'none' || 
+                       computed.visibility === 'hidden' || 
+                       bait.offsetHeight === 0 ||
+                       bait.offsetWidth === 0;
+        
+        document.body.removeChild(bait);
+        
+        setAdBlockerDetected(blocked);
+        
+      } catch (error) {
+        console.warn('Ad blocker detection failed:', error);
+        setAdBlockerDetected(false);
+      }
     };
+    
     detectAdBlocker();
-    const interval = setInterval(detectAdBlocker, 2000);
+    const interval = setInterval(detectAdBlocker, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // Lock scroll when ad blocker detected
+  // Handle scroll lock and ad refresh
   useEffect(() => {
     if (adBlockerDetected) {
       document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
     } else {
       document.body.style.overflow = 'auto';
+      document.body.style.position = 'static';
+      
+      // Refresh ads when switching pages
+      if (page === 'output' || page === 'input') {
+        const timer = setTimeout(() => {
+          setAdRefreshKey(prev => prev + 1);
+        }, 500);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [adBlockerDetected]);
+  }, [adBlockerDetected, page]);
 
-  // Refresh ads on page change (you can comment this out later if ads reload too often)
-  // useEffect(() => {
-  //   setAdRefreshKey((prev) => prev + 1);
-  // }, [page]);
-
+  // Submit handler with enhanced error handling
   const handleSubmit = async () => {
     if (!inputText.trim() || inputText.length > 2000 || loading) return;
+    
     setLoading(true);
     setError('');
+    
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+      
       const response = await fetch(`${API_URL}/api/humanize`, {
         method: 'POST',
         headers: {
@@ -66,36 +129,96 @@ const FreeTextHumanizer = () => {
           text: inputText,
           tone: tone,
         }),
+        signal: controller.signal
       });
-      const data = await response.json();
+      
+      clearTimeout(timeoutId);
+      
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to humanize text');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.error || 
+          `Server error: ${response.status} ${response.statusText}`
+        );
       }
+      
+      const data = await response.json();
+      
+      // Update stats
+      const newStats = {
+        processed: (stats.processed || 0) + 1,
+        lastUpdated: new Date().toISOString(),
+        lastTone: tone,
+        avgLength: data.humanizedLength
+      };
+      
+      setStats(newStats);
+      localStorage.setItem('humanizerStats', JSON.stringify(newStats));
+      
       setOutputData(data);
       setPage('output');
+      
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 3000);
+      console.error('Humanization error:', err);
+      
+      let errorMessage = 'Failed to humanize text. ';
+      
+      if (err.name === 'AbortError') {
+        errorMessage += 'Request timed out. Please try again.';
+      } else if (err.message.includes('429')) {
+        errorMessage += 'Server is busy. Please wait a moment.';
+      } else if (err.message.includes('500')) {
+        errorMessage += 'Server error. Please try again in a few moments.';
+      } else if (err.message.includes('Failed to fetch')) {
+        errorMessage += 'Network error. Check your connection.';
+      } else {
+        errorMessage += err.message;
+      }
+      
+      setError(errorMessage);
+      
+      // Auto-clear error after 5 seconds
+      setTimeout(() => setError(''), 5000);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopy = () => {
+  // Copy handler with improved feedback
+  const handleCopy = async () => {
     if (outputData?.humanizedText) {
-      navigator.clipboard.writeText(outputData.humanizedText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      try {
+        await navigator.clipboard.writeText(outputData.humanizedText);
+        setCopied(true);
+        
+        // Reset after 2 seconds
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error('Copy failed:', err);
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = outputData.humanizedText;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     }
   };
 
+  // Download handler
   const handleDownload = () => {
     if (outputData?.humanizedText) {
-      const blob = new Blob([outputData.humanizedText], { type: 'text/plain' });
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `humanized-text-${timestamp}.txt`;
+      
+      const blob = new Blob([outputData.humanizedText], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'humanized-text.txt';
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -103,14 +226,45 @@ const FreeTextHumanizer = () => {
     }
   };
 
-  const handleRegenerate = async () => {
-    setPage('input');
-    setTimeout(() => handleSubmit(), 100);
+  // Regenerate handler
+  const handleRegenerate = () => {
+    if (inputText.trim()) {
+      setPage('input');
+      setTimeout(() => handleSubmit(), 100);
+    }
   };
 
+  // Back to input handler
   const handleBackToInput = () => {
     setPage('input');
     setOutputData(null);
+    setError('');
+  };
+
+  // Clear input handler
+  const handleClearInput = () => {
+    setInputText('');
+    setError('');
+  };
+
+  // Sample texts for quick testing
+  const sampleTexts = [
+    {
+      name: "Academic",
+      text: "The exponential growth of artificial intelligence necessitates a comprehensive reevaluation of traditional pedagogical methodologies to ensure educational systems remain relevant in an increasingly automated landscape."
+    },
+    {
+      name: "Business",
+      text: "Leveraging data-driven insights through advanced analytics platforms enables organizations to optimize operational efficiencies, enhance customer engagement metrics, and drive sustainable revenue growth in competitive market environments."
+    },
+    {
+      name: "Casual",
+      text: "AI is pretty cool because it helps with boring tasks and makes things easier. Like, you can ask it questions and get answers right away without searching all over the internet."
+    }
+  ];
+
+  const handleUseSample = (sampleText) => {
+    setInputText(sampleText);
     setError('');
   };
 
@@ -118,292 +272,562 @@ const FreeTextHumanizer = () => {
   const isOverLimit = charCount > 2000;
   const isButtonDisabled = !inputText.trim() || isOverLimit || loading;
 
+  // Ad blocker screen
   if (adBlockerDetected) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-white px-6">
-        <div className="max-w-xl text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-black text-white px-6">
+        <div className="max-w-xl text-center p-8 rounded-2xl bg-gray-800/50 backdrop-blur-sm border border-gray-700">
+          <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-6 animate-pulse" />
           <h1 className="text-3xl font-bold mb-4">Ad Blocker Detected</h1>
-          <p className="text-gray-300 mb-6">
-            ForeverFree Humanizer is funded entirely by ads.
-            Please disable your ad blocker to continue using this site.
+          <p className="text-gray-300 mb-6 text-lg">
+            <span className="text-purple-400 font-semibold">ForeverFree Humanizer</span> is 100% free because of ad support. 
+            Ads keep this service running for everyone.
           </p>
-          <ol className="text-left text-gray-400 mb-6 list-decimal list-inside">
-            <li>Disable your ad blocker for this site</li>
-            <li>Refresh the page</li>
-          </ol>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-white text-black px-6 py-3 rounded-xl font-semibold"
-          >
-            I've Disabled My Ad Blocker
-          </button>
+          
+          <div className="bg-gray-900/50 p-6 rounded-xl mb-8 text-left">
+            <h3 className="font-bold mb-3 text-yellow-400">📱 How to disable ad blocker:</h3>
+            <ol className="space-y-3 text-gray-300">
+              <li className="flex items-start">
+                <span className="bg-gray-700 rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">1</span>
+                Click your ad blocker icon (uBlock, AdBlock, etc.)
+              </li>
+              <li className="flex items-start">
+                <span className="bg-gray-700 rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">2</span>
+                Select "Pause on this site" or "Disable for this site"
+              </li>
+              <li className="flex items-start">
+                <span className="bg-gray-700 rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">3</span>
+                Refresh this page
+              </li>
+            </ol>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-3 rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all hover:scale-105"
+            >
+              🔄 I've Disabled My Ad Blocker
+            </button>
+            <button
+              onClick={() => setAdBlockerDetected(false)}
+              className="bg-gray-700 text-white px-8 py-3 rounded-xl font-semibold hover:bg-gray-600 transition-all"
+            >
+              Try Anyway
+            </button>
+          </div>
+          
+          <p className="text-gray-400 text-sm mt-8">
+            No account required • No credit card • Forever free
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div
-      className={`min-h-screen ${darkMode ? 'dark bg-gray-900' : 'bg-gradient-to-b from-white via-pink-50 to-white'}`}
-    >
+    <div className={`min-h-screen transition-colors duration-300 ${
+      darkMode 
+        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
+        : 'bg-gradient-to-br from-blue-50 via-pink-50 to-purple-50'
+    }`}>
       {/* Animated background elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="floating-orb orb-1"></div>
-        <div className="floating-orb orb-2"></div>
-        <div className="floating-orb orb-3"></div>
-        <div className="stars"></div>
+        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-purple-300/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-300/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute top-3/4 left-3/4 w-48 h-48 bg-pink-300/10 rounded-full blur-3xl animate-pulse delay-500"></div>
       </div>
 
-      {/* Top Banner Ad - 728x90 */}
-      <div className="flex justify-center py-4">
+      {/* Top Banner Ad */}
+      <div className="flex justify-center py-4 bg-white/5 backdrop-blur-sm">
         <AdsterraBanner
           key={`top-${adRefreshKey}`}
-          adKey="cd565dee18419e2f87c8cc9af2c50727" // ← Replace with your TOP banner key
-          domain="www.highperformanceformat.com"   // ← Replace with actual domain from your TOP unit's code
+          adKey="cd565dee18419e2f87c8cc9af2c50727"
+          domain="www.highperformanceformat.com"
           width={728}
           height={90}
+          debug={false}
         />
       </div>
 
-      {/* Main Content with Sidebars */}
+      {/* Main Content */}
       <div className="container mx-auto px-4 py-8 relative z-10">
-        <div className="flex gap-8">
-          {/* Left Sidebar - 160x600 */}
-          <div className="hidden lg:block flex-shrink-0 sticky top-8 h-fit">
-            <AdsterraBanner
-              adKey="0cc840d2d41c8c3b952d52ae7366dd20"   // ← Replace with your LEFT sidebar key
-              domain="www.highperformanceformat.com" // ← Replace with actual domain from LEFT unit
-              width={160}
-              height={600}
-            />
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Left Sidebar Ad */}
+          <div className="hidden lg:block flex-shrink-0">
+            <div className="sticky top-8">
+              <AdsterraBanner
+                adKey="0cc840d2d41c8c3b952d52ae7366dd20"
+                domain="www.highperformanceformat.com"
+                width={160}
+                height={600}
+                debug={false}
+              />
+            </div>
           </div>
 
           {/* Main Content Area */}
           <div className="flex-1 max-w-4xl mx-auto">
             {/* Header */}
             <div className="text-center mb-12">
-              <div className="flex items-center justify-center gap-3 mb-4">
-                <Sparkles
-                  className={`w-8 h-8 ${darkMode ? 'text-purple-400' : 'text-purple-600'} animate-pulse`}
-                />
-                <h1 className="text-5xl font-bold gradient-text">ForeverFree Humanizer</h1>
-                <Zap
-                  className={`w-8 h-8 ${darkMode ? 'text-yellow-400' : 'text-yellow-600'} animate-pulse`}
-                />
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <Sparkles className={`w-10 h-10 ${
+                    darkMode ? 'text-purple-400' : 'text-purple-600'
+                  } animate-pulse`} />
+                  <h1 className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                    ForeverFree Humanizer
+                  </h1>
+                  <Zap className={`w-10 h-10 ${
+                    darkMode ? 'text-yellow-400' : 'text-yellow-600'
+                  } animate-pulse`} />
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowStats(!showStats)}
+                    className={`p-2 rounded-full ${
+                      darkMode 
+                        ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+                        : 'bg-white text-gray-700 hover:bg-gray-100'
+                    } transition-all hover:scale-110`}
+                    title="Show Stats"
+                  >
+                    <BarChart className="w-5 h-5" />
+                  </button>
+                  
+                  <button
+                    onClick={() => setDarkMode(!darkMode)}
+                    className={`p-3 rounded-full ${
+                      darkMode 
+                        ? 'bg-gray-800 text-yellow-400 hover:bg-gray-700' 
+                        : 'bg-white text-gray-700 hover:bg-gray-100'
+                    } transition-all hover:scale-110 shadow-lg`}
+                    title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                  >
+                    {darkMode ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
+                  </button>
+                </div>
               </div>
-              <p className={`text-xl ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                Transform AI Text Into Authentic Human Expression — 100% Free, Forever, Unlimited ✨
+              
+              <p className={`text-lg sm:text-xl mb-6 ${
+                darkMode ? 'text-gray-300' : 'text-gray-600'
+              }`}>
+                Transform AI Text Into Authentic Human Expression — 
+                <span className="font-semibold text-purple-600"> 100% Free, Forever, Unlimited</span> ✨
               </p>
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`mt-4 p-2 rounded-full ${
-                  darkMode ? 'bg-gray-700 text-yellow-400' : 'bg-gray-200 text-gray-700'
-                } hover:scale-110 transition-transform`}
-              >
-                {darkMode ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
-              </button>
+              
+              {/* Stats Panel */}
+              {showStats && (
+                <div className={`inline-block p-4 rounded-xl mb-4 ${
+                  darkMode ? 'bg-gray-800/50' : 'bg-white/50'
+                } backdrop-blur-sm border ${
+                  darkMode ? 'border-gray-700' : 'border-gray-200'
+                }`}>
+                  <div className="flex items-center gap-4 text-sm">
+                    <div className="text-center">
+                      <div className="font-bold text-lg text-purple-600">{stats.processed || 0}</div>
+                      <div className="text-gray-500">Texts Processed</div>
+                    </div>
+                    {stats.lastTone && (
+                      <div className="text-center">
+                        <div className="font-bold text-lg text-pink-600">{stats.lastTone}</div>
+                        <div className="text-gray-500">Last Tone</div>
+                      </div>
+                    )}
+                    {stats.avgLength && (
+                      <div className="text-center">
+                        <div className="font-bold text-lg text-blue-600">{stats.avgLength}</div>
+                        <div className="text-gray-500">Avg Length</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Input Page */}
             {page === 'input' && (
-              <div className={`glass-card ${darkMode ? 'glass-dark' : ''} p-8 rounded-3xl mb-8`}>
-                <div className="mb-6">
-                  <label
-                    className={`block text-sm font-semibold mb-2 ${
-                      darkMode ? 'text-gray-200' : 'text-gray-700'
-                    }`}
-                  >
-                    Enter Your AI-Generated Text
-                  </label>
+              <div className={`backdrop-blur-sm ${
+                darkMode 
+                  ? 'bg-gray-800/30 border-gray-700' 
+                  : 'bg-white/30 border-gray-200'
+              } border rounded-2xl p-6 sm:p-8 mb-8 shadow-xl`}>
+                <div className="mb-8">
+                  <div className="flex justify-between items-center mb-4">
+                    <label className={`block text-lg font-semibold ${
+                      darkMode ? 'text-gray-200' : 'text-gray-800'
+                    }`}>
+                      ✍️ Enter Your AI-Generated Text
+                    </label>
+                    <button
+                      onClick={handleClearInput}
+                      className={`text-sm px-3 py-1 rounded-lg ${
+                        darkMode 
+                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      } transition-colors`}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  
                   <textarea
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Paste your AI-generated text here..."
-                    className={`w-full h-64 p-4 rounded-xl border-2 ${
+                    placeholder="Paste your AI-generated text here... (Max 2000 characters)"
+                    className={`w-full h-64 p-4 rounded-xl border-2 text-lg transition-all ${
                       isOverLimit
-                        ? 'border-red-500'
+                        ? 'border-red-500 bg-red-50/50'
                         : darkMode
-                        ? 'border-gray-600 bg-gray-800 text-white'
-                        : 'border-gray-300 bg-white text-gray-900'
-                    } focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none`}
+                        ? 'border-gray-600 bg-gray-900/50 text-white focus:border-purple-500'
+                        : 'border-gray-300 bg-white/80 text-gray-900 focus:border-purple-400'
+                    } focus:outline-none focus:ring-2 ${
+                      darkMode ? 'focus:ring-purple-500/50' : 'focus:ring-purple-400/50'
+                    } resize-none`}
                   />
-                  <div
-                    className={`text-sm mt-2 ${
+                  
+                  <div className="flex justify-between items-center mt-2">
+                    <div className={`text-sm ${
                       isOverLimit
-                        ? 'text-red-500 font-semibold'
+                        ? 'text-red-500 font-semibold animate-pulse'
                         : darkMode
                         ? 'text-gray-400'
                         : 'text-gray-600'
-                    }`}
-                  >
-                    {charCount}/2000 characters
+                    }`}>
+                      {charCount}/2000 characters
+                      {charCount > 0 && (
+                        <span className="ml-2">
+                          ({Math.ceil(charCount / 5)} words approx.)
+                        </span>
+                      )}
+                    </div>
+                    {isOverLimit && (
+                      <div className="text-red-500 text-sm font-semibold flex items-center gap-1">
+                        <AlertCircle className="w-4 h-4" />
+                        Too long! Please shorten your text.
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="mb-6">
-                  <label
-                    className={`block text-sm font-semibold mb-2 ${
-                      darkMode ? 'text-gray-200' : 'text-gray-700'
-                    }`}
-                  >
-                    Select Tone
+                <div className="mb-8">
+                  <label className={`block text-lg font-semibold mb-4 ${
+                    darkMode ? 'text-gray-200' : 'text-gray-800'
+                  }`}>
+                    🎨 Select Tone
                   </label>
-                  <select
-                    value={tone}
-                    onChange={(e) => setTone(e.target.value)}
-                    className={`w-full p-4 rounded-xl border-2 ${
-                      darkMode
-                        ? 'border-gray-600 bg-gray-800 text-white'
-                        : 'border-gray-300 bg-white text-gray-900'
-                    } focus:outline-none focus:ring-2 focus:ring-purple-500`}
-                  >
-                    <option value="Neutral">Neutral</option>
-                    <option value="Formal">Formal</option>
-                    <option value="Casual">Casual</option>
-                    <option value="Persuasive">Persuasive</option>
-                    <option value="Friendly">Friendly</option>
-                  </select>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    {['Neutral', 'Formal', 'Casual', 'Persuasive', 'Friendly'].map((toneOption) => (
+                      <button
+                        key={toneOption}
+                        onClick={() => setTone(toneOption)}
+                        className={`py-3 px-4 rounded-xl text-center transition-all ${
+                          tone === toneOption
+                            ? darkMode
+                              ? 'bg-purple-600 text-white shadow-lg'
+                              : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                            : darkMode
+                            ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                            : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        {toneOption}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {error && <div className="error-message mb-6 shake">{error}</div>}
+                {/* Quick Samples */}
+                <div className="mb-8">
+                  <label className={`block text-sm font-semibold mb-3 ${
+                    darkMode ? 'text-gray-300' : 'text-gray-600'
+                  }`}>
+                    🚀 Quick Samples (Click to try):
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {sampleTexts.map((sample, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleUseSample(sample.text)}
+                        className={`p-3 rounded-lg text-sm text-left transition-all ${
+                          darkMode
+                            ? 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50'
+                            : 'bg-white/50 text-gray-700 hover:bg-gray-100/50'
+                        } hover:scale-[1.02]`}
+                      >
+                        <div className="font-medium mb-1">{sample.name}</div>
+                        <div className="text-xs opacity-70 truncate">{sample.text.substring(0, 60)}...</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {error && (
+                  <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 ${
+                    darkMode
+                      ? 'bg-red-900/30 border border-red-700/50'
+                      : 'bg-red-50 border border-red-200'
+                  }`}>
+                    <AlertCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                      darkMode ? 'text-red-400' : 'text-red-500'
+                    }`} />
+                    <div className="text-sm">{error}</div>
+                  </div>
+                )}
 
                 <button
                   onClick={handleSubmit}
                   disabled={isButtonDisabled}
-                  className={`btn-primary w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-2 ${
-                    isButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''
+                  className={`w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition-all ${
+                    isButtonDisabled
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:scale-[1.02] active:scale-[0.98]'
+                  } ${
+                    darkMode
+                      ? 'bg-gradient-to-r from-purple-700 to-pink-700 text-white'
+                      : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg hover:shadow-xl'
                   }`}
                 >
                   {loading ? (
                     <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Humanizing...
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                      <span className="animate-pulse">Humanizing...</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-5 h-5" />
-                      Humanize It!
+                      <Sparkles className="w-6 h-6" />
+                      ✨ Humanize It! (100% Free)
                     </>
                   )}
                 </button>
+                
+                <div className={`text-center mt-4 text-sm ${
+                  darkMode ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  ⚡ Powered by advanced AI • No sign up required • Unlimited usage
+                </div>
               </div>
             )}
 
             {/* Output Page */}
             {page === 'output' && outputData && (
-              <div className={`glass-card ${darkMode ? 'glass-dark' : ''} p-8 rounded-3xl mb-8`}>
-                <h2
-                  className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}
-                >
-                  ✨ Humanized Text
-                </h2>
-                <div
-                  className={`p-6 rounded-xl mb-6 ${
-                    darkMode ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-900'
-                  } border-2 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}
-                >
-                  <p className="whitespace-pre-wrap">{outputData.humanizedText}</p>
+              <div className={`backdrop-blur-sm ${
+                darkMode 
+                  ? 'bg-gray-800/30 border-gray-700' 
+                  : 'bg-white/30 border-gray-200'
+              } border rounded-2xl p-6 sm:p-8 mb-8 shadow-xl`}>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className={`text-2xl font-bold flex items-center gap-2 ${
+                    darkMode ? 'text-white' : 'text-gray-900'
+                  }`}>
+                    <Sparkles className="w-6 h-6 text-purple-500" />
+                    ✨ Humanized Text
+                  </h2>
+                  <div className={`text-sm px-3 py-1 rounded-full ${
+                    darkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700'
+                  }`}>
+                    {outputData.tone} Tone
+                  </div>
                 </div>
-                <div
-                  className={`text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}
-                >
-                  <span>Tone: {outputData.tone}</span>
-                  <span className="mx-2">•</span>
-                  <span>Original: {outputData.originalLength} chars</span>
-                  <span className="mx-2">•</span>
-                  <span>Humanized: {outputData.humanizedLength} chars</span>
+                
+                <div className={`p-5 rounded-xl mb-6 ${
+                  darkMode 
+                    ? 'bg-gray-900/50 text-gray-100 border-gray-700' 
+                    : 'bg-white/80 text-gray-900 border-gray-200'
+                } border`}>
+                  <div className="whitespace-pre-wrap leading-relaxed text-lg">
+                    {outputData.humanizedText}
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                <div className={`mb-8 p-4 rounded-xl ${
+                  darkMode ? 'bg-gray-800/50' : 'bg-gray-100/50'
+                }`}>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div>
+                      <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Original Length
+                      </div>
+                      <div className={`text-xl font-bold ${
+                        darkMode ? 'text-gray-300' : 'text-gray-800'
+                      }`}>
+                        {outputData.originalLength}
+                      </div>
+                    </div>
+                    <div>
+                      <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Humanized Length
+                      </div>
+                      <div className={`text-xl font-bold ${
+                        outputData.lengthRatio > 1.05 
+                          ? 'text-yellow-500' 
+                          : darkMode 
+                            ? 'text-green-400' 
+                            : 'text-green-600'
+                      }`}>
+                        {outputData.humanizedLength}
+                      </div>
+                    </div>
+                    <div>
+                      <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Length Ratio
+                      </div>
+                      <div className={`text-xl font-bold ${
+                        outputData.lengthRatio > 1.05 
+                          ? 'text-yellow-500' 
+                          : darkMode 
+                            ? 'text-green-400' 
+                            : 'text-green-600'
+                      }`}>
+                        {outputData.lengthRatio || '1.00'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Status
+                      </div>
+                      <div className={`text-xl font-bold flex items-center justify-center gap-1 ${
+                        outputData.cached 
+                          ? darkMode ? 'text-blue-400' : 'text-blue-600' 
+                          : darkMode ? 'text-green-400' : 'text-green-600'
+                      }`}>
+                        {outputData.cached ? (
+                          <>
+                            <span>Cached</span>
+                            <CheckCircle className="w-5 h-5" />
+                          </>
+                        ) : 'Fresh'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <button
                     onClick={handleCopy}
-                    className="btn-secondary py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
+                    className={`py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${
+                      copied
+                        ? darkMode
+                          ? 'bg-green-700 text-white'
+                          : 'bg-green-100 text-green-700 border border-green-300'
+                        : darkMode
+                        ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    } hover:scale-[1.02]`}
                   >
                     <Copy className="w-5 h-5" />
-                    {copied ? 'Copied!' : 'Copy'}
+                    {copied ? 'Copied! ✓' : 'Copy Text'}
                   </button>
+                  
                   <button
                     onClick={handleDownload}
-                    className="btn-secondary py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
+                    className={`py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${
+                      darkMode
+                        ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    } hover:scale-[1.02]`}
                   >
                     <Download className="w-5 h-5" />
-                    Download
+                    Download .txt
                   </button>
+                  
                   <button
                     onClick={handleRegenerate}
-                    className="btn-secondary py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
+                    className={`py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${
+                      darkMode
+                        ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    } hover:scale-[1.02]`}
                   >
                     <RefreshCw className="w-5 h-5" />
                     Regenerate
                   </button>
+                  
                   <button
                     onClick={handleBackToInput}
-                    className="btn-secondary py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
+                    className={`py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${
+                      darkMode
+                        ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    } hover:scale-[1.02]`}
                   >
                     <ArrowLeft className="w-5 h-5" />
-                    Back to Input
+                    New Text
                   </button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Right Sidebar - 160x600 */}
-          <div className="hidden lg:block flex-shrink-0 sticky top-8 h-fit">
-            <AdsterraBanner
-              adKey="15d45323977b03b6df0139313d64172b" // ← Replace with your right sidebar key
-              domain="www.highperformanceformat.com" // ← Replace with actual domain from your right unit
-              width={160}
-              height={600}
-            />
+          {/* Right Sidebar Ad */}
+          <div className="hidden lg:block flex-shrink-0">
+            <div className="sticky top-8">
+              <AdsterraBanner
+                adKey="15d45323977b03b6df0139313d64172b"
+                domain="www.highperformanceformat.com"
+                width={160}
+                height={600}
+                debug={false}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Bottom Banner Ad - 728x90 */}
-        <div className="flex justify-center mt-8">
+        {/* Bottom Banner Ad */}
+        <div className="flex justify-center mt-12">
           <AdsterraBanner
             key={`bottom-${adRefreshKey}`}
-            adKey="cd199a74bf99c7d40490085e0d2ed9fe" // ← Replace if this is not your bottom key
-            domain="www.highperformanceformat.com" // ← Replace with actual domain from your bottom unit
+            adKey="cd199a74bf99c7d40490085e0d2ed9fe"
+            domain="www.highperformanceformat.com"
             width={728}
             height={90}
+            debug={false}
           />
         </div>
       </div>
 
       {/* Footer */}
-      <footer className={`py-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-        <div className="flex flex-wrap justify-center gap-4 mb-3 text-sm">
-          <a
-            href="/terms"
-            className={`hover:underline ${darkMode ? 'hover:text-gray-200' : 'hover:text-gray-900'}`}
-          >
-            Terms of Use
-          </a>
-          <span>•</span>
-          <a
-            href="/privacy"
-            className={`hover:underline ${darkMode ? 'hover:text-gray-200' : 'hover:text-gray-900'}`}
-          >
-            Privacy Policy
-          </a>
-          <span>•</span>
-          <a
-            href="/disclaimer"
-            className={`hover:underline ${darkMode ? 'hover:text-gray-200' : 'hover:text-gray-900'}`}
-          >
-            Disclaimer
-          </a>
-          <span>•</span>
-          <a
-            href="mailto:4everfreehumanizer@gmail.com"
-            className={`hover:underline ${darkMode ? 'hover:text-gray-200' : 'hover:text-gray-900'}`}
-          >
-            Contact Us
-          </a>
+      <footer className={`py-8 text-center ${
+        darkMode ? 'text-gray-400' : 'text-gray-600'
+      }`}>
+        <div className="container mx-auto px-4">
+          <div className="flex flex-wrap justify-center gap-6 mb-6">
+            {['Terms of Use', 'Privacy Policy', 'Disclaimer', 'Contact Us'].map((item, index) => (
+              <a
+                key={index}
+                href={`/${item.toLowerCase().replace(' ', '-')}`}
+                className={`hover:underline transition-colors ${
+                  darkMode 
+                    ? 'hover:text-gray-200' 
+                    : 'hover:text-gray-900'
+                }`}
+              >
+                {item}
+              </a>
+            ))}
+            <a
+              href="mailto:4everfreehumanizer@gmail.com"
+              className={`hover:underline transition-colors ${
+                darkMode 
+                  ? 'hover:text-gray-200' 
+                  : 'hover:text-gray-900'
+              }`}
+            >
+              💌 Support Email
+            </a>
+          </div>
+          
+          <div className={`text-sm mb-2 ${
+            darkMode ? 'text-gray-500' : 'text-gray-500'
+          }`}>
+            © 2026 ForeverFree Humanizer – Making AI text undetectable, forever free.
+          </div>
+          
+          <div className="text-xs opacity-70">
+            Powered by advanced AI • No sign up • No limits • Human-like quality guaranteed
+          </div>
         </div>
-        <p className="text-sm">
-          © 2026 ForeverFree Humanizer – Human‑like text, forever free.
-        </p>
       </footer>
     </div>
   );
