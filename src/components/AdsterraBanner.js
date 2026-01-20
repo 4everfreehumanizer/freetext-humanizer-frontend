@@ -6,139 +6,142 @@ const AdsterraBanner = ({
   width, 
   height, 
   domain = 'www.highperformanceformat.com',
-  debug = false // Set to true to see debug info
+  debug = true // Keep true for now
 }) => {
   const containerRef = useRef(null);
   const [adStatus, setAdStatus] = useState('loading');
   const [debugInfo, setDebugInfo] = useState('');
+  const scriptLoadedRef = useRef(false);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || scriptLoadedRef.current) return;
 
-    // Clear previous content
+    console.log(`🔵 AdsterraBanner mounting for key: ${adKey}`);
+    
+    // Clear container
     containerRef.current.innerHTML = '';
     setAdStatus('loading');
-    setDebugInfo('Initializing ad...');
+    setDebugInfo('Initializing...');
+    scriptLoadedRef.current = true;
 
-    // Create wrapper div
+    // Create wrapper
     const wrapper = document.createElement('div');
     wrapper.id = `adsterra-${adKey}`;
-    wrapper.className = 'adsterra-ad-wrapper';
+    wrapper.className = 'adsterra-wrapper';
     
-    // Create placeholder (shows while ad loads)
+    // Create placeholder
     const placeholder = document.createElement('div');
+    placeholder.className = 'adsterra-placeholder';
     placeholder.style.cssText = `
       width: ${width}px;
       height: ${height}px;
-      background: #f5f5f5;
-      border: 1px dashed #ddd;
+      background: linear-gradient(135deg, #667eea0d 0%, #764ba20d 100%);
+      border: 2px dashed #667eea40;
+      border-radius: 8px;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      color: #666;
-      font-size: 12px;
+      color: #667eea;
+      font-size: 14px;
       position: relative;
+      margin: 0 auto;
     `;
+    
     placeholder.innerHTML = `
-      <div>Ad Loading...</div>
-      <div style="font-size:10px;margin-top:5px;">Key: ${adKey.substring(0, 8)}...</div>
+      <div style="font-weight: bold; margin-bottom: 5px;">🔄 Loading Ad...</div>
+      <div style="font-size: 11px; opacity: 0.7;">${width}×${height}</div>
+      <div style="font-size: 10px; margin-top: 8px; opacity: 0.5;">Key: ${adKey.substring(0, 8)}...</div>
     `;
+    
     wrapper.appendChild(placeholder);
     containerRef.current.appendChild(wrapper);
 
-    // Load Adsterra script
-    const loadAdScript = () => {
-      try {
-        // 1. Create atOptions configuration
-        window.atOptions = window.atOptions || {};
-        window.atOptions = {
-          key: adKey,
-          format: 'iframe',
-          height: height,
-          width: width,
-          params: {},
-          // Add callback for debugging
-          onLoad: () => {
-            setAdStatus('loaded');
-            setDebugInfo('Ad loaded successfully');
-            if (debug) console.log(`✅ Ad loaded: ${adKey}`);
-          },
-          onError: () => {
-            setAdStatus('error');
-            setDebugInfo('Failed to load ad');
-            placeholder.innerHTML = `
-              <div style="color:#e74c3c;">Ad Failed to Load</div>
-              <div style="font-size:10px;margin-top:5px;">
-                Check ad blocker or key<br/>
-                Key: ${adKey.substring(0, 8)}...
-              </div>
-            `;
-            if (debug) console.error(`❌ Ad failed: ${adKey}`);
-          }
-        };
+    // CRITICAL FIX: Create atOptions on WINDOW object
+    // This must be set GLOBALLY before loading the script
+    if (!window.atOptions) {
+      window.atOptions = {};
+    }
+    
+    // Set the specific ad configuration
+    window.atOptions = {
+      key: adKey,
+      format: 'iframe',
+      height: height,
+      width: width,
+      params: {}
+    };
+    
+    console.log(`📋 window.atOptions set for: ${adKey}`, window.atOptions);
 
-        // 2. Create and append the script
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = `https://${domain}/${adKey}/invoke.js`;
-        script.async = true;
-        
-        script.onload = () => {
-          setDebugInfo('Script loaded, waiting for ad...');
-          if (debug) console.log(`📜 Script loaded for: ${adKey}`);
-          
-          // Check if ad loaded after 3 seconds
-          setTimeout(() => {
-            const iframe = wrapper.querySelector('iframe');
-            if (iframe && iframe.style.visibility !== 'hidden') {
-              setAdStatus('loaded');
-              setDebugInfo('Ad displayed');
-              placeholder.style.display = 'none';
-            } else {
-              setAdStatus('timeout');
-              setDebugInfo('Ad timed out');
-            }
-          }, 3000);
-        };
-        
-        script.onerror = () => {
-          setAdStatus('script_error');
-          setDebugInfo('Failed to load script');
+    // Create script element
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = `https://${domain}/${adKey}/invoke.js`;
+    script.async = true;
+    script.defer = true;
+    
+    script.onload = () => {
+      console.log(`✅ Script loaded for: ${adKey}`);
+      setDebugInfo('Script loaded, ad should appear...');
+      
+      // Check if ad loaded after delay
+      setTimeout(() => {
+        const iframes = wrapper.getElementsByTagName('iframe');
+        if (iframes.length > 0) {
+          console.log(`🎉 Ad iframe found for: ${adKey}`);
+          setAdStatus('loaded');
+          setDebugInfo('Ad displayed ✓');
+          placeholder.style.display = 'none';
+        } else {
+          console.log(`⚠️ No iframe found for: ${adKey}`);
+          setAdStatus('no_iframe');
+          setDebugInfo('No ad served yet');
           placeholder.innerHTML = `
-            <div style="color:#e74c3c;">Script Failed</div>
-            <div style="font-size:10px;">
-              Domain: ${domain}<br/>
-              Check network tab
+            <div style="font-weight: bold; margin-bottom: 5px; color: #f59e0b;">⏳ Waiting for Ad</div>
+            <div style="font-size: 11px; opacity: 0.7;">${width}×${height}</div>
+            <div style="font-size: 10px; margin-top: 10px; opacity: 0.5;">
+              No ad inventory yet<br/>
+              Try refreshing
             </div>
           `;
-          if (debug) console.error(`❌ Script failed: ${adKey}`);
-        };
-
-        // 3. Append script
-        wrapper.appendChild(script);
-        setDebugInfo('Script appended, loading...');
-
-      } catch (error) {
-        setAdStatus('error');
-        setDebugInfo(`Error: ${error.message}`);
-        if (debug) console.error('Adsterra setup error:', error);
-      }
+        }
+      }, 2000); // Wait 2 seconds for ad to render
+    };
+    
+    script.onerror = (error) => {
+      console.error(`❌ Script failed for ${adKey}:`, error);
+      setAdStatus('error');
+      setDebugInfo('Script failed to load');
+      
+      placeholder.innerHTML = `
+        <div style="font-weight: bold; margin-bottom: 5px; color: #ef4444;">❌ Ad Error</div>
+        <div style="font-size: 11px; opacity: 0.7;">${width}×${height}</div>
+        <div style="font-size: 10px; margin-top: 10px; opacity: 0.5; text-align: center;">
+          Script failed to load<br/>
+          Check ad blocker<br/>
+          Key: ${adKey.substring(0, 8)}...
+        </div>
+      `;
     };
 
-    // Small delay to ensure DOM is ready
-    const timer = setTimeout(loadAdScript, 100);
-    
+    // Append script to wrapper
+    console.log(`📤 Appending script for: ${adKey}`);
+    wrapper.appendChild(script);
+    setDebugInfo('Script appended, loading...');
+
+    // Cleanup
     return () => {
-      clearTimeout(timer);
-      // Cleanup
-      if (window.atOptions && window.atOptions.key === adKey) {
-        delete window.atOptions;
+      console.log(`🧹 Cleaning up ad: ${adKey}`);
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
       }
+      scriptLoadedRef.current = false;
     };
   }, [adKey, width, height, domain, debug]);
 
   return (
-    <div>
+    <div className="adsterra-container">
       <div
         ref={containerRef}
         style={{
@@ -151,19 +154,26 @@ const AdsterraBanner = ({
         }}
       />
       
-      {/* Debug info (only shows when debug=true) */}
-      {debug && (
-        <div style={{
-          fontSize: '10px',
-          color: '#666',
-          padding: '5px',
-          background: '#f9f9f9',
-          border: '1px solid #eee',
-          marginTop: '5px'
-        }}>
-          <strong>Ad Debug:</strong> {adStatus} | {debugInfo}
-        </div>
-      )}
+      {/* Debug info - always show for now */}
+      <div style={{
+        fontSize: '11px',
+        color: debug ? '#666' : 'transparent',
+        padding: '4px',
+        background: debug ? '#f8fafc' : 'transparent',
+        border: debug ? '1px solid #e2e8f0' : 'none',
+        marginTop: '4px',
+        borderRadius: '4px',
+        textAlign: 'center',
+        minHeight: '32px'
+      }}>
+        {debug ? (
+          <>
+            <strong>Ad Debug:</strong> {adStatus} | {debugInfo}
+          </>
+        ) : (
+          <span style={{color: 'transparent'}}>.</span>
+        )}
+      </div>
     </div>
   );
 };
