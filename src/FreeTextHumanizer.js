@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+console.log('🟢 FreeTextHumanizer.js is LOADING');
 import { Sparkles, Zap, Moon, Sun, Copy, Download, RefreshCw, ArrowLeft, Loader2, AlertCircle, CheckCircle, BarChart } from 'lucide-react';
 import AdsterraBanner from './components/AdsterraBanner';
 
@@ -6,6 +7,7 @@ const API_URL = 'https://freetext-humanizer-backend.onrender.com';
 
 const FreeTextHumanizer = () => {
   const [darkMode, setDarkMode] = useState(() => {
+    // Check user preference or system theme
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('darkMode');
       if (saved !== null) return JSON.parse(saved);
@@ -21,9 +23,18 @@ const FreeTextHumanizer = () => {
   const [error, setError] = useState('');
   const [outputData, setOutputData] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [adBlockerDetected, setAdBlockerDetected] = useState(false);
   const [adRefreshKey, setAdRefreshKey] = useState(0);
   const [stats, setStats] = useState({ processed: 0, lastUpdated: null });
   const [showStats, setShowStats] = useState(false);
+
+  // ADD THIS useEffect RIGHT HERE:
+  useEffect(() => {
+    console.log('🔵 FreeTextHumanizer COMPONENT MOUNTED');
+    console.log('📊 Current page:', page);
+    console.log('🚫 Ad blocker detected:', adBlockerDetected);
+    console.log('🔄 Ad refresh key:', adRefreshKey);
+  }, []);
 
   // Save dark mode preference
   useEffect(() => {
@@ -43,13 +54,66 @@ const FreeTextHumanizer = () => {
     }
   }, []);
 
-  // Refresh ads when page changes
+  // Enhanced ad blocker detection - COMMENTED OUT
+  /*
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setAdRefreshKey(prev => prev + 1);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [page]);
+    const detectAdBlocker = async () => {
+      try {
+        // Method 1: Check for blocked ad scripts
+        const testUrl = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js';
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1000);
+        
+        const response = await fetch(testUrl, {
+          method: 'HEAD',
+          mode: 'no-cors',
+          signal: controller.signal
+        }).catch(() => null);
+        
+        clearTimeout(timeoutId);
+        
+        // Method 2: Check for ad-related classes being blocked
+        const bait = document.createElement('div');
+        bait.className = 'adsbox pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
+        bait.style.cssText = 'position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px;';
+        document.body.appendChild(bait);
+        
+        const computed = window.getComputedStyle(bait);
+        const blocked = computed.display === 'none' || 
+                       computed.visibility === 'hidden' || 
+                       bait.offsetHeight === 0 ||
+                       bait.offsetWidth === 0;
+        
+        document.body.removeChild(bait);
+        
+        setAdBlockerDetected(blocked);
+        
+      } catch (error) {
+        console.warn('Ad blocker detection failed:', error);
+        setAdBlockerDetected(false);
+      }
+    };
+    
+    detectAdBlocker();
+    const interval = setInterval(detectAdBlocker, 5000);
+    return () => clearInterval(interval);
+  }, []);
+  */
+
+  // Handle scroll lock and ad refresh - COMMENTED OUT THE BLOCKER PART
+  useEffect(() => {
+    // Always set to auto (no blocking)
+    document.body.style.overflow = 'auto';
+    document.body.style.position = 'static';
+    
+    // Refresh ads when switching pages
+    if (page === 'output' || page === 'input') {
+      const timer = setTimeout(() => {
+        setAdRefreshKey(prev => prev + 1);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [page]); // Removed adBlockerDetected dependency
 
   // Submit handler with enhanced error handling
   const handleSubmit = async () => {
@@ -60,7 +124,7 @@ const FreeTextHumanizer = () => {
     
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
       
       const response = await fetch(`${API_URL}/api/humanize`, {
         method: 'POST',
@@ -213,6 +277,61 @@ const FreeTextHumanizer = () => {
   const charCount = inputText.length;
   const isOverLimit = charCount > 2000;
   const isButtonDisabled = !inputText.trim() || isOverLimit || loading;
+
+  // Ad blocker screen - COMMENTED OUT
+  /*
+  if (adBlockerDetected) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-black text-white px-6">
+        <div className="max-w-xl text-center p-8 rounded-2xl bg-gray-800/50 backdrop-blur-sm border border-gray-700">
+          <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-6 animate-pulse" />
+          <h1 className="text-3xl font-bold mb-4">Ad Blocker Detected</h1>
+          <p className="text-gray-300 mb-6 text-lg">
+            <span className="text-purple-400 font-semibold">ForeverFree Humanizer</span> is 100% free because of ad support. 
+            Ads keep this service running for everyone.
+          </p>
+          
+          <div className="bg-gray-900/50 p-6 rounded-xl mb-8 text-left">
+            <h3 className="font-bold mb-3 text-yellow-400">📱 How to disable ad blocker:</h3>
+            <ol className="space-y-3 text-gray-300">
+              <li className="flex items-start">
+                <span className="bg-gray-700 rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">1</span>
+                Click your ad blocker icon (uBlock, AdBlock, etc.)
+              </li>
+              <li className="flex items-start">
+                <span className="bg-gray-700 rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">2</span>
+                Select "Pause on this site" or "Disable for this site"
+              </li>
+              <li className="flex items-start">
+                <span className="bg-gray-700 rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">3</span>
+                Refresh this page
+              </li>
+            </ol>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-3 rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all hover:scale-105"
+            >
+              🔄 I've Disabled My Ad Blocker
+            </button>
+            <button
+              onClick={() => setAdBlockerDetected(false)}
+              className="bg-gray-700 text-white px-8 py-3 rounded-xl font-semibold hover:bg-gray-600 transition-all"
+            >
+              Try Anyway
+            </button>
+          </div>
+          
+          <p className="text-gray-400 text-sm mt-8">
+            No account required • No credit card • Forever free
+          </p>
+        </div>
+      </div>
+    );
+  }
+  */
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
