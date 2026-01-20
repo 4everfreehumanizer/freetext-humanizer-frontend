@@ -50,10 +50,10 @@ const FreeTextHumanizer = () => {
     }
   }, [adBlockerDetected]);
 
-  // Refresh ads on page change (you can comment this out later if ads reload too often)
-  // useEffect(() => {
-  //   setAdRefreshKey((prev) => prev + 1);
-  // }, [page]);
+  // Refresh ads on page change
+  useEffect(() => {
+    setAdRefreshKey((prev) => prev + 1);
+  }, [page]);
 
   const handleSubmit = async () => {
     if (!inputText.trim() || inputText.length > 2000 || loading) return;
