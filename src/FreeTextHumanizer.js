@@ -54,8 +54,7 @@ const FreeTextHumanizer = () => {
     }
   }, []);
 
-  // Enhanced ad blocker detection - COMMENTED OUT
-  /*
+  // Enhanced ad blocker detection
   useEffect(() => {
     const detectAdBlocker = async () => {
       try {
@@ -98,22 +97,26 @@ const FreeTextHumanizer = () => {
     const interval = setInterval(detectAdBlocker, 5000);
     return () => clearInterval(interval);
   }, []);
-  */
 
-  // Handle scroll lock and ad refresh - COMMENTED OUT THE BLOCKER PART
+  // Handle scroll lock and ad refresh
   useEffect(() => {
-    // Always set to auto (no blocking)
-    document.body.style.overflow = 'auto';
-    document.body.style.position = 'static';
-    
-    // Refresh ads when switching pages
-    if (page === 'output' || page === 'input') {
-      const timer = setTimeout(() => {
-        setAdRefreshKey(prev => prev + 1);
-      }, 500);
-      return () => clearTimeout(timer);
+    if (adBlockerDetected) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+    } else {
+      document.body.style.overflow = 'auto';
+      document.body.style.position = 'static';
+      
+      // Refresh ads when switching pages
+      if (page === 'output' || page === 'input') {
+        const timer = setTimeout(() => {
+          setAdRefreshKey(prev => prev + 1);
+        }, 500);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [page]); // Removed adBlockerDetected dependency
+  }, [adBlockerDetected, page]);
 
   // Submit handler with enhanced error handling
   const handleSubmit = async () => {
@@ -278,8 +281,7 @@ const FreeTextHumanizer = () => {
   const isOverLimit = charCount > 2000;
   const isButtonDisabled = !inputText.trim() || isOverLimit || loading;
 
-  // Ad blocker screen - COMMENTED OUT
-  /*
+  // Ad blocker screen
   if (adBlockerDetected) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-black text-white px-6">
@@ -331,7 +333,6 @@ const FreeTextHumanizer = () => {
       </div>
     );
   }
-  */
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
