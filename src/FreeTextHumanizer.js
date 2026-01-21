@@ -163,33 +163,12 @@ const FreeTextHumanizer = () => {
         <div className="stars"></div>
       </div>
 
-      {/* Top Banner Ad - 728x90 */}
-      <div className="flex justify-center py-4">
-        <AdsterraBanner
-          key={`top-${adRefreshKey}`}
-          adKey="cd565dee18419e2f87c8cc9af2c50727"
-          domain="www.highperformanceformat.com"
-          width={728}
-          height={90}
-          debug={true}
-        />
-      </div>
-
-      {/* Main Content with Sidebars */}
+      {/* ADDED: Main container div */}
       <div className="container mx-auto px-4 py-8 relative z-10">
-        <div className="flex gap-8">
-          {/* Left Sidebar - 160x600 */}
-          <div className="hidden lg:block flex-shrink-0 sticky top-8 h-fit">
-            <AdsterraBanner
-              key={`left-${adRefreshKey}`}
-              adKey="0cc840d2d41c8c3b952d52ae7366dd20"
-              domain="www.highperformanceformat.com"
-              width={160}
-              height={600}
-              debug={true}
-            />
-          </div>
-
+        
+        {/* ADDED: Centering wrapper div */}
+        <div className="flex justify-center">
+          
           {/* Main Content Area */}
           <div className="flex-1 max-w-4xl mx-auto">
             {/* Header */}
@@ -360,18 +339,8 @@ const FreeTextHumanizer = () => {
               </div>
             )}
           </div>
-
-          {/* Right Sidebar - 160x600 */}
-          <div className="hidden lg:block flex-shrink-0 sticky top-8 h-fit">
-            <AdsterraBanner
-              key={`right-${adRefreshKey}`}
-              adKey="15d45323977b03b6df0139313d64172b"
-              domain="www.highperformanceformat.com"
-              width={160}
-              height={600}
-              debug={true}
-            />
-          </div>
+          
+        {/* CLOSE: Centering wrapper div */}
         </div>
 
         {/* Bottom Banner Ad - 728x90 */}
@@ -385,6 +354,8 @@ const FreeTextHumanizer = () => {
             debug={true}
           />
         </div>
+        
+      {/* CLOSE: Main container div */}
       </div>
 
       {/* Footer */}
