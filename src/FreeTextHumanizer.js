@@ -8,7 +8,6 @@ const FreeTextHumanizer = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [page, setPage] = useState('input');
   const [inputText, setInputText] = useState('');
-  const [tone, setTone] = useState('Neutral');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [outputData, setOutputData] = useState(null);
@@ -69,7 +68,7 @@ const FreeTextHumanizer = () => {
         },
         body: JSON.stringify({
           text: inputText,
-          tone: tone,
+          tone: 'Clear & Conversational',
         }),
       });
 
@@ -231,31 +230,6 @@ const FreeTextHumanizer = () => {
                   </div>
                 </div>
 
-                <div className="mb-6">
-                  <label
-                    className={`block text-sm font-semibold mb-2 ${
-                      darkMode ? 'text-gray-200' : 'text-gray-700'
-                    }`}
-                  >
-                    Select Tone
-                  </label>
-                  <select
-                    value={tone}
-                    onChange={(e) => setTone(e.target.value)}
-                    className={`w-full p-4 rounded-xl border-2 ${
-                      darkMode
-                        ? 'border-gray-600 bg-gray-800 text-white'
-                        : 'border-gray-300 bg-white text-gray-900'
-                    } focus:outline-none focus:ring-2 focus:ring-purple-500`}
-                  >
-                    <option value="Neutral">Neutral</option>
-                    <option value="Formal">Formal</option>
-                    <option value="Casual">Casual</option>
-                    <option value="Persuasive">Persuasive</option>
-                    <option value="Friendly">Friendly</option>
-                  </select>
-                </div>
-
                 {error && <div className="error-message mb-6 shake">{error}</div>}
 
                 <button
@@ -299,8 +273,6 @@ const FreeTextHumanizer = () => {
                 <div
                   className={`text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}
                 >
-                  <span>Tone: {outputData.tone}</span>
-                  <span className="mx-2">•</span>
                   <span>Original: {outputData.originalLength} chars</span>
                   <span className="mx-2">•</span>
                   <span>Humanized: {outputData.humanizedLength} chars</span>
